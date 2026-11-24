@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -588,4 +588,177 @@
           </td>
           <td>
             <button class="btn ${reg.checkedIn ? "btn-outline" : "btn-success"}" style="padding:0.3rem 0.6rem;font-size:0.78rem;" onclick="toggleCheckIn('${reg.id}')">
-              ${reg.checkedIn ? "Undo Chec
+              ${reg.checkedIn ? "Undo Check-In" : "Check In"}
+            </button>
+            <button class="btn btn-danger-text" onclick="removeRegistration('${reg.id}')">Remove</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    document.getElementById("createEventForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const title = document.getElementById("eventTitle").value.trim();
+      const date = document.getElementById("eventDate").value;
+      const venue = document.getElementById("eventVenue").value.trim();
+      const maxSlots = parseInt(document.getElementById("eventCapacity").value, 10);
+      const description = document.getElementById("eventDesc").value.trim();
+
+      if (!title || !date || !venue || isNaN(maxSlots) || maxSlots < 1) return;
+
+      const newEvent = {
+        id: "evt-" + Date.now(),
+        title,
+        date,
+        venue,
+        maxSlots,
+        description
+      };
+
+      state.events.unshift(newEvent);
+      selectedRosterEventId = newEvent.id;
+      saveState();
+      e.target.reset();
+      document.getElementById("eventCapacity").value = 25;
+      render();
+    });
+
+    function openSignupModal(eventId) {
+      const evt = state.events.find(e => e.id === eventId);
+      if (!evt) return;
+      document.getElementById("signupEventId").value = eventId;
+      document.getElementById("modalEventTitle").textContent = `Sign Up: ${evt.title}`;
+      const alertBox = document.getElementById("signupAlert");
+      alertBox.className = "alert";
+      alertBox.textContent = "";
+      document.getElementById("signupForm").reset();
+      document.getElementById("signupModal").classList.add("open");
+    }
+
+    function closeSignupModal() {
+      document.getElementById("signupModal").classList.remove("open");
+    }
+
+    document.getElementById("closeModalBtn").addEventListener("click", closeSignupModal);
+    document.getElementById("signupModal").addEventListener("click", (e) => {
+      if (e.target.id === "signupModal") closeSignupModal();
+    });
+
+    document.getElementById("signupForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const eventId = document.getElementById("signupEventId").value;
+      const memberName = document.getElementById("memberName").value.trim();
+      const memberId = document.getElementById("memberId").value.trim();
+      const email = document.getElementById("memberEmail").value.trim();
+      const role = document.getElementById("memberRole").value;
+      const alertBox = document.getElementById("signupAlert");
+
+      const evt = state.events.find(ev => ev.id === eventId);
+      if (!evt) return;
+
+      const eventRegs = state.registrations.filter(r => r.eventId === eventId);
+
+      if (eventRegs.length >= evt.maxSlots) {
+        alertBox.className = "alert error";
+        alertBox.textContent = "Registration closed: This event has reached maximum capacity.";
+        return;
+      }
+
+      const isDuplicate = eventRegs.some(
+        r => r.memberId.toLowerCase() === memberId.toLowerCase()
+      );
+      if (isDuplicate) {
+        alertBox.className = "alert error";
+        alertBox.textContent = `Member ID "${memberId}" is already registered for this event.`;
+        return;
+      }
+
+      state.registrations.push({
+        id: "reg-" + Date.now(),
+        eventId,
+        memberName,
+        memberId,
+        email,
+        role,
+        checkedIn: false
+      });
+
+      selectedRosterEventId = eventId;
+      saveState();
+      closeSignupModal();
+      render();
+    });
+
+    function selectRoster(eventId) {
+      selectedRosterEventId = eventId;
+      render();
+    }
+
+    function toggleCheckIn(regId) {
+      const reg = state.registrations.find(r => r.id === regId);
+      if (!reg) return;
+      reg.checkedIn = !reg.checkedIn;
+      saveState();
+      render();
+    }
+
+    function removeRegistration(regId) {
+      state.registrations = state.registrations.filter(r => r.id !== regId);
+      saveState();
+      render();
+    }
+
+    function deleteEvent(eventId) {
+      if (!confirm("Delete this event and all its registrations?")) return;
+      state.events = state.events.filter(e => e.id !== eventId);
+      state.registrations = state.registrations.filter(r => r.eventId !== eventId);
+      if (selectedRosterEventId === eventId) {
+        selectedRosterEventId = (state.events[0] && state.events[0].id) || null;
+      }
+      saveState();
+      render();
+    }
+
+    document.getElementById("rosterSearch").addEventListener("input", renderRoster);
+
+    document.getElementById("exportCsvBtn").addEventListener("click", () => {
+      const evt = state.events.find(e => e.id === selectedRosterEventId);
+      if (!evt) return;
+      const regs = state.registrations.filter(r => r.eventId === evt.id);
+
+      const headers = ["Event Title", "Member Name", "Member ID", "Email/Contact", "Role", "Check-In Status"];
+      const rows = regs.map(r => [
+        evt.title,
+        r.memberName,
+        r.memberId,
+        r.email || "",
+        r.role,
+        r.checkedIn ? "Checked In" : "Registered"
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const slug = evt.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      link.href = url;
+      link.download = `${slug || "event"}-attendance-roster.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("resetDemoBtn").addEventListener("click", () => {
+      state = cloneData(DEFAULT_DATA);
+      selectedRosterEventId = state.events[0].id;
+      saveState();
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
+
